@@ -64,3 +64,6 @@ Package.resolved
 # Visual Studio generated files
 open_spiel/.vs
 /.env
+
+# model weights and checkpoints
+checkpoints/

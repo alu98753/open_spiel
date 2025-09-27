@@ -9,13 +9,36 @@ from open_spiel.python.bots import bluechip_bridge
 import time
 FLAGS = flags.FLAGS
 import jax.numpy as jnp
-
+import pickle, os
+import haiku as hk
+import jax
+import jax.numpy as jnp
+import optax
 from Algorithm.dummy_ai_forward import DummyNet
+from Algorithm.bridge_pg_net import policy_network_fn  # 直接重用定義
+
+def load_rl_model(step, checkpoint_dir="checkpoints/bridge_pg"):
+    """載入 RL 訓練好的 Haiku 模型參數."""
+    # 載入 params
+    with open(os.path.join(checkpoint_dir, f"params_{step}.pkl"), "rb") as f:
+        params = pickle.load(f)
+
+    # 重建 network (需要知道 num_actions/obs_size)
+    game = pyspiel.load_game("bridge(use_double_dummy_result=True)")
+    num_actions = game.num_distinct_actions()
+    obs_shape = game.observation_tensor_shape()
+    obs_size = int(np.prod(obs_shape))
+
+    net_fn = policy_network_fn(num_actions, hidden_units=[256, 256])
+    policy_network = hk.without_apply_rng(hk.transform(net_fn))
+
+    return policy_network, params
+
 
 # 初始化
 dummy_model = DummyNet()
 
-flags.DEFINE_string("ai_model", "dummy", "選擇 AI 模型 (dummy, rl1, rl2, random)")
+flags.DEFINE_string("ai_model", "dummy", "選擇 AI 模型 (dummy, pg, rl2, random)")
 
 def dummy_action(state):
     # 取得 observation (571 維)
@@ -44,9 +67,36 @@ def ai_action_selector(state):
     elif model_name == "random":
         return np.random.choice(state.legal_actions())
     
-    elif model_name == "rl1":
-        # TODO: 這裡放你的 RL 模型1
-        return np.random.choice(state.legal_actions())  # 先佔位
+    elif model_name == "pg":
+        print("使用 RL 模型 : policy gredient 選動作")
+        if not hasattr(ai_action_selector, "rl_model"):
+            # 第一次載入模型
+            policy_network, params = load_rl_model(step=20)  # 你要選擇對應的 checkpoint
+            ai_action_selector.rl_model = (policy_network, params)
+
+        policy_network, params = ai_action_selector.rl_model
+
+        # 準備 observation
+        obs = np.array(state.observation_tensor(), dtype=np.float32)
+        obs = jnp.array(obs)
+
+        # 前向推論
+        logits = policy_network.apply(params, obs)
+
+        # 過濾不合法動作
+        legal_actions_mask = jnp.array(state.legal_actions_mask())
+        logits = jnp.where(legal_actions_mask, logits, -jnp.inf)
+
+        # 選 argmax 動作
+        action = int(jnp.argmax(logits))
+
+        if action in state.legal_actions():
+            print("argmax 合法，選擇該動作")
+            return action
+        else:
+            print("argmax 不合法，隨機挑一個合法動作")
+            return np.random.choice(state.legal_actions())
+
     
     elif model_name == "rl2":
         # TODO: 這裡放你的 RL 模型2
