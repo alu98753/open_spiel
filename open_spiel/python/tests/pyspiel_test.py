@@ -13,7 +13,6 @@
 # limitations under the License.
 """General tests for pyspiel python bindings."""
 
-import importlib
 import os
 
 from absl.testing import absltest
@@ -25,48 +24,14 @@ from open_spiel.python.mfg import games as mfgs  # pylint: disable=unused-import
 import pyspiel
 
 
-def _try_importing_game(import_statement):
-  # First get the fully-qualified module name from the import statement.
-  parts = import_statement.split(" ")
-  if len(parts) == 2:
-    # "import module" -> "module"
-    fully_qualified_module_name = import_statement.split(" ")[-1]
-  elif len(parts) == 4 and parts[0] == "from" and parts[2] == "import":
-    # "from this import that" -> "this.that"
-    fully_qualified_module_name = f"{parts[1]}.{parts[3]}"
-  else:
-    raise ValueError(f"Invalid import statement: {import_statement}")
-  # Now try to import the module and return True if it worked.
-  try:
-    importlib.import_module(fully_qualified_module_name)
-    return True
-  except ImportError:
-    return False
-  except (SyntaxError, TypeError, ValueError, RuntimeError) as e:
-    print(
-        f"Failed to import {fully_qualified_module_name}, but with common"
-        f" non-import error: {e}"
-    )
-    return False
-
-# pylint: disable=line-too-long
-_PYTHON_OPTIONAL_GAMES = frozenset([
-    game
-    for game, import_statement in [
-        # TODO: b/437724266 - enable once we've finished implemention here.
-        # tuple(["python_pokerkit_wrapper",
-        #        "from open_spiel.python.games import pokerkit_wrapper",
-        #        ]),
-        tuple([
-            "python_pokerkit_wrapper_acpc_style",
-            "from open_spiel.python.games import pokerkit_wrapper",
-        ])
-    ]
-    if _try_importing_game(import_statement)
+_FULLY_OPTIONAL_PYTHON_GAMES = frozenset([
+    "python_pokerkit_wrapper",
+    "python_pokerkit_wrapper_acpc_style",
+    "python_repeated_pokerkit"
 ])
-
 # Specify game names in alphabetical order, to make the test easier to read.
-EXPECTED_GAMES = frozenset([
+# "Mandatory" = neither optional nor included only if certain flags are set.
+EXPECTED_MANDATORY_GAMES = frozenset([
     "2048",
     "add_noise",
     "amazons",
@@ -190,23 +155,35 @@ EXPECTED_GAMES = frozenset([
     "ultimate_tic_tac_toe",
     "y",
     "zerosum",
-]).union(_PYTHON_OPTIONAL_GAMES)
+])
 
 
 class PyspielTest(parameterized.TestCase):
 
-  def test_registered_names(self):
+  def test_registered_names_is_sorted(self):
+    game_names = pyspiel.registered_names()
+    self.assertSequenceEqual(game_names, sorted(game_names))
+
+  def test_registered_names_contains_expected_games(self):
     game_names = pyspiel.registered_names()
 
-    expected = list(EXPECTED_GAMES)
+    expected = list(EXPECTED_MANDATORY_GAMES)
     if (os.environ.get("OPEN_SPIEL_BUILD_WITH_HANABI", "OFF") == "ON" and
         "hanabi" not in expected):
       expected.append("hanabi")
     if (os.environ.get("OPEN_SPIEL_BUILD_WITH_ACPC", "OFF") == "ON" and
         "universal_poker" not in expected):
       expected.append("universal_poker")
-    expected = sorted(expected)
-    self.assertCountEqual(game_names, expected)
+      expected.append("repeated_poker")
+    # Verify we have registered all mandatory games + games added via flags
+    self.assertContainsSubset(expected, game_names)
+
+    # Check that the contents of the remainder are all fully optional games.
+    # (If this fails, it likely means that someone added a game but forgot to
+    # update either EXPECTED_MANDATORY_GAMES or _FULLY_OPTIONAL_PYTHON_GAMES.)
+    remaining_games = set(game_names).difference(set(expected))
+    self.assertContainsSubset(expected_subset=remaining_games,
+                              actual_set=_FULLY_OPTIONAL_PYTHON_GAMES)
 
   def test_default_loadable(self):
     # Games which cannmot be loaded with default parameters will be skipped by
@@ -233,6 +210,9 @@ class PyspielTest(parameterized.TestCase):
         "start_at",
         "zerosum",
     ]
+    if (os.environ.get("OPEN_SPIEL_BUILD_WITH_ACPC", "OFF") == "ON" and
+        "repeated_poker" not in expected):
+      expected.append("repeated_poker")
     self.assertCountEqual(non_default_loadable, expected)
 
   def test_registered_game_attributes(self):
@@ -405,11 +385,20 @@ class PyspielTest(parameterized.TestCase):
   @parameterized.parameters(
       ("universal_poker", pyspiel.hunl_game_string("fullgame")),
       (
-          "python_pokerkit_wrapper_acpc_style",
-          "python_pokerkit_wrapper_acpc_style(variant=NoLimitTexasHoldem,"
-          + "num_players=2,blinds=5 10,stack_sizes=10000 10000,min_bet=100,"
-          + "bring_in=100,small_bet=100,big_bet=100)",
-      ),
+          "repeated_poker",
+          "repeated_poker(max_num_hands=10,reset_stacks=True,"
+          + "rotate_dealer=True,universal_poker_game_string=universal_poker("
+          + "betting=nolimit,bettingAbstraction=fullgame,blind=100 50,"
+          + "firstPlayer=2 1 1 1,numBoardCards=0 3 1 1,numHoleCards=2,"
+          + "numPlayers=2,numRanks=13,numRounds=4,numSuits=4,stack=20000 20000"
+          + "))"),
+      ("python_pokerkit_wrapper", "python_pokerkit_wrapper()"),
+      ("python_pokerkit_wrapper",
+       "python_pokerkit_wrapper(variant=FixedLimitSevenCardStud)"),
+      ("python_pokerkit_wrapper",
+       "python_pokerkit_wrapper(variant=PotLimitOmahaHoldem)"),
+      ("python_pokerkit_wrapper_acpc_style",
+       "python_pokerkit_wrapper_acpc_style(),"),
       ("kuhn_poker", "kuhn_poker(players=3)"),
       ("tic_tac_toe", "tic_tac_toe"),
       ("breakthrough", "breakthrough(rows=6,columns=6)"))

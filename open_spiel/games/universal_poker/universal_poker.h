@@ -111,9 +111,8 @@ class UniversalPokerState : public State {
   const BettingAbstraction &betting() const { return betting_abstraction_; }
 
   int PotSize(double multiple = 1.) const;
-
-  // Returns the raise-to size of the current player going all-in.
-  int AllInSize() const;
+  int AllInSize() const;  // Raise-to size of the current player going all-in.
+  double GetTotalReward(Player player) const;
   void ApplyChoiceAction(StateActionType action_type, int size);
 
  protected:
@@ -121,8 +120,6 @@ class UniversalPokerState : public State {
 
  private:
   void _CalculateActionsAndNodeType();
-
-  double GetTotalReward(Player player) const;
 
   const uint32_t &GetPossibleActionsMask() const { return possibleActions_; }
   int GetPossibleActionCount() const;
@@ -269,7 +266,7 @@ int GetHoleCardsReachIndex(int card_a, int card_b,
 
 // Make random subgame, with optionally specified round, pot size, board
 // cards and hand reach probs. If all of these variables are specified,
-// it is actually a non-randomized subgame: by omiting any parameter,
+// it is actually a non-randomized subgame: by omitting any parameter,
 // a random value will be supplied automatically.
 std::shared_ptr<const Game> MakeRandomSubgame(
     std::mt19937 &rng, int pot_size = -1, std::string board_cards = "",
