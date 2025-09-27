@@ -1,0 +1,15 @@
+   WBridge5 (version 5.1) est gratuit.
+   Le fichier Wbridge5_setup peut être copié et distribué gratuitement.
+   Il est par contre demandé de ne pas distribuer le programme sous une autre forme.
+   En particulier, il est interdit de distribuer des éléments isolés du package (comme wbridge5.exe). 
+   Il fonctionne sous Windows2000, WindowsXP, Widows Vista, Windows7, Windows8.
+
+   Avec le programme, il est possible de participer à un tournoi en ligne quotidien "Bridgez" organisé par Gérard Joyez.
+   Inscrivez-vous sur le lien: 
+         http://bridgez.net/inscription.html  
+
+   Une liste des utilisateurs existe. Pour s'inscrire envoyez un message à: wbridge5-subscribe@Yahoogroupes.fr 
+   Si vous trouvez des bugs, ou si vous avez des suggestions ou des commentaires,
+   vous pouvez le signaler à la liste des utilisateurs ou écrivez moi à webmaster@wbridge5.com.
+   Dans le cas où une donne particulière est concernée, merci  de joindre le numéro de la donne ou son fichier.
+   

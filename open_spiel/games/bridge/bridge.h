@@ -53,14 +53,16 @@ namespace bridge {
 
 inline constexpr int kBiddingActionBase = kNumCards;  // First bidding action.
 inline constexpr int kNumObservationTypes = 4;  // Bid, lead, declare, defend
-// Because bids always increase, any individual bid can be made at most once.
-// Thus for each bid, we only need to track (a) who bid it (if anyone), (b) who
-// doubled it (if anyone), and (c) who redoubled it (if anyone).
-// We also report the number of passes before the first bid; we could
-// equivalently report which player made the first call.
-// This is much more compact than storing the auction call-by-call, which
-// requires 318 turns * 38 possible calls per turn = 12084 bits (although
-// in practice almost all auctions have fewer than 80 calls).
+/* Because bids always increase, any individual bid can be made at most once.
+ Thus for each bid, we only need to track 
+ (a) who bid it (if anyone), 
+ (b) who doubled it (if anyone), and 
+ (c) who redoubled it (if anyone).
+ We also report the number of passes before the first bid; we could
+ equivalently report which player made the first call.
+ This is much more compact than storing the auction call-by-call, which
+ requires 318 turns * 38 possible calls per turn = 12084 bits (although
+ in practice almost all auctions have fewer than 80 calls).*/
 inline constexpr int kAuctionTensorSize =
     kNumPlayers * (1           // Did this player pass before the opening bid?
                    + kNumBids  // Did this player make each bid?
@@ -78,10 +80,19 @@ inline constexpr int kMaxAuctionLength =
 enum class Suit { kClubs = 0, kDiamonds = 1, kHearts = 2, kSpades = 3 };
 
 // State of a single trick.
+/*
+
+Player leader: 引牌的玩家。
+
+Denomination trumps: 這一局的王牌花色。
+
+int card: 引牌者打出的第一張牌。
+
+*/
 class Trick {
  public:
   Trick() : Trick{kInvalidPlayer, kNoTrump, 0} {}
-  Trick(Player leader, Denomination trumps, int card);
+  Trick(Player leader, Denomination trumps, int card); //參數化建構函式 (Parameterized Constructor)
   void Play(Player player, int card);
   Suit LedSuit() const { return led_suit_; }
   Player Winner() const { return winning_player_; }
@@ -244,9 +255,9 @@ class BridgeGame : public Game {
   }
 
     std::vector<int> InformationStateTensorShape() const override {
-      return {kNumObservationTypes +
-              std::max(GetPlayTensorSize(NumTricksInObservation()),
-                       kAuctionTensorSize)};
+        return {kNumObservationTypes +
+                std::max(GetPlayTensorSize(NumTricksInObservation()),
+                        kAuctionTensorSize)};
   }
 
   int MaxGameLength() const override {

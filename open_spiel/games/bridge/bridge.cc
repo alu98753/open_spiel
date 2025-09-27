@@ -155,7 +155,7 @@ std::string BidStringAscii(int bid) {
 }
 
 // There are two partnerships: players 0 and 2 versus players 1 and 3.
-// We call 0 and 2 partnership 0, and 1 and 3 partnership 1.
+// We call 0 and 2 partnership 0, and 1 and 3 partnership 1. （0 代表 N/S，1 代表 E/W）
 int Partnership(Player player) { return player & 1; }
 int Partner(Player player) { return player ^ 2; }
 }  // namespace
@@ -432,21 +432,21 @@ void BridgeState::InformationStateTensor(Player player,
 
 void BridgeState::WriteObservationTensor(Player player,
                                          absl::Span<float> values) const {
-  SPIEL_CHECK_GE(player, 0);
+  SPIEL_CHECK_GE(player, 0); // 檢查傳入的 player ID 是否有效 (大於等於0且小於總玩家數)
   SPIEL_CHECK_LT(player, num_players_);
 
-  std::fill(values.begin(), values.end(), 0.0);
-  if (phase_ == Phase::kDeal) return;
+  std::fill(values.begin(), values.end(), 0.0); // 將整個向量'values'的所有元素初始化為 0.0。
+  if (phase_ == Phase::kDeal) return; // 如果遊戲還在發牌階段 (kDeal)，則沒有任何觀測資訊，直接返回全為 0 的向量。
   int partnership = Partnership(player);
-  auto ptr = values.begin();
+  auto ptr = values.begin(); // 建立一個指向向量 'values' 開頭的迭代器 'ptr'，用於後續填充觀測資訊。
   if (num_cards_played_ > 0) {
     // Observation for play phase
-    const bool defending = (partnership != Partnership(contract_.declarer));
-    if (phase_ == Phase::kPlay) ptr[2 + defending] = 1;
+    const bool defending = (partnership != Partnership(contract_.declarer)); // 判斷玩家是否在防守方 (defending)。
+    if (phase_ == Phase::kPlay) ptr[2 + defending] = 1;  //確認是莊家方還是防守方,   why 是2? 因為0,1 這邊用不到
     ptr += kNumObservationTypes;
 
     // Contract
-    ptr[contract_.level - 1] = 1;
+    ptr[contract_.level - 1] = 1; // 使用 one-hot 編碼表示合約的階數 (1-7)。'contract_.level' 是 1 到 7其中一個，所以要減 1 來對應 index 0 到 6。
     ptr += kNumBidLevels;
 
     // Trump suit
@@ -458,11 +458,11 @@ void BridgeState::WriteObservationTensor(Player player,
     *ptr++ = contract_.double_status == DoubleStatus::kDoubled;
     *ptr++ = contract_.double_status == DoubleStatus::kRedoubled;
 
-    // Identity of the declarer.
+    // Identity of the declarer. 表示莊家相對於當前玩家的位置
     ptr[(contract_.declarer + kNumPlayers - player) % kNumPlayers] = 1;
     ptr += kNumPlayers;
 
-    // Vulnerability.
+    // Vulnerability. 寫入莊家方的身價狀態 (0 for non-vulnerable, 1 for vulnerable)。
     ptr[is_vulnerable_[Partnership(contract_.declarer)]] = 1.0;
     ptr += kNumVulnerabilities;
 
@@ -477,7 +477,9 @@ void BridgeState::WriteObservationTensor(Player player,
       if (holder_[i] == dummy) ptr[i] = 1;
     ptr += kNumCards;
 
-    // Indexing into history for recent tricks.
+    // Indexing into history for recent tricks.     // --- 寫入已打出的牌 (Tricks) ---
+    // 計算當前是第幾磴、這磴已經出了幾張牌、以及這磴在 history_ 中的起始索引。
+
     int current_trick = num_cards_played_ / kNumPlayers;
     int this_trick_cards_played = num_cards_played_ % kNumPlayers;
     int this_trick_start = history_.size() - this_trick_cards_played;
@@ -488,13 +490,13 @@ void BridgeState::WriteObservationTensor(Player player,
       for (int i = 0; i < this_trick_cards_played; ++i) {
         int card = history_[this_trick_start + i].action;
         int relative_player = (i + leader + kNumPlayers - player) % kNumPlayers;
-        ptr[relative_player * kNumCards + card] = 1;
+        ptr[relative_player * kNumCards + card] = 1; // 在一個 4 * 52 的區塊中，標示出是「哪個相對位置的玩家」出了「哪張牌」。
       }
     }
 
-    ptr += kNumPlayers * kNumCards;
+    ptr += kNumPlayers * kNumCards; // 指標前進 4 * 52 = 208 個位置，為當前磴預留空間。
 
-    // Previous tricks
+    // Previous tricks 迴圈處理之前的磴 有打過的排 ++ 分別記在該玩家的位置
     for (int j = current_trick - 1;
          j >= std::max(0, current_trick - num_tricks_in_observation_ + 1);
          --j) {
@@ -509,16 +511,16 @@ void BridgeState::WriteObservationTensor(Player player,
       ptr += kNumPlayers * kNumCards;
     }
 
-    // Move pointer for future tricks to have a fixed size tensor
+    // Move pointer for future tricks to have a fixed size tensor 如果觀察的磴數大於已經完成的磴數，將指標跳過剩餘未使用的空間，以保持 Tensor 長度固定。
     if (num_tricks_in_observation_ > current_trick + 1) {
       ptr += kNumPlayers * kNumCards *
              (num_tricks_in_observation_ - current_trick - 1);
     }
 
     // Number of tricks taken by each side.
-    ptr[num_declarer_tricks_] = 1;
+    ptr[num_declarer_tricks_] = 1; // 使用 one-hot 編碼表示莊家方贏得的磴數。
     ptr += kNumTricks;
-    ptr[num_cards_played_ / 4 - num_declarer_tricks_] = 1;
+    ptr[num_cards_played_ / 4 - num_declarer_tricks_] = 1; // 使用 one-hot 編碼表示防守方贏得的磴數。
     ptr += kNumTricks;
 
     int kPlayTensorSize =
@@ -528,35 +530,68 @@ void BridgeState::WriteObservationTensor(Player player,
     SPIEL_CHECK_LE(std::distance(values.begin(), ptr), values.size());
   } else {
     // Observation for auction or opening lead.
+    /*這行程式碼設定觀測向量的「標頭」，告訴 AI 現在是什麼情境。
+    使用三元運算子 `(condition ? value_if_true : value_if_false)`：
+    如果 phase_ == Phase::kPlay，代表叫牌剛結束，正要開局引牌 (lead)。此時，向量的 index 1 會被設為 1.0。
+    如果 phase_ != Phase::kPlay (即 Phase::kAuction)，代表還在叫牌中 (bid)。此時，向量的 index 0 會被設為 1.0。*/
     ptr[phase_ == Phase::kPlay ? 1 : 0] = 1;
+
     ptr += kNumObservationTypes;
-    ptr[is_vulnerable_[partnership]] = 1;
+    ptr[is_vulnerable_[partnership]] = 1; // **我方牌局身價 (Vulnerability)**
     ptr += kNumVulnerabilities;
-    ptr[is_vulnerable_[1 - partnership]] = 1;
+    ptr[is_vulnerable_[1 - partnership]] = 1; // 敵方牌局身價
     ptr += kNumVulnerabilities;
-    int last_bid = 0;
+
+    int last_bid = 0; // 初始化一個變數來追蹤最後一個有效的叫品 (非 Pass、Double、Redouble)。
+    // 遍歷遊戲歷史紀錄 (history_)，從第一筆叫牌動作開始。
+    // 遊戲歷史的前 kNumCards (52) 個動作是發牌，所以從第 52 個索引開始才是叫牌。
     for (int i = kNumCards; i < history_.size(); ++i) {
-      int this_call = history_[i].action - kBiddingActionBase;
+      int this_call = history_[i].action - kBiddingActionBase; // 取得當前的叫牌動作，並將 action ID 轉換為叫品 ID (0: Pass, 1: Double, 2: Redouble, 3-35: Bids ...)。
+
+      // 計算叫牌者相對於當前玩家 (player) 的位置。 (i % kNumPlayers) 是叫牌者的絕對座位 (0-3)。
+      // 加上 kNumPlayers 再取模是為了處理負數情況，確保結果在 0-3 之間。 結果 0 代表自己，1 代表左手敵方，2 代表對家，3 代表右手敵方。
       int relative_bidder = (i + kNumPlayers - player) % kNumPlayers;
+
+      // --- 特徵 1: 開叫前的 Pass  dim = 1---
+      // 如果目前還沒有有效叫品 (last_bid == 0)，且當前動作是 Pass，表示這是開叫前的 Pass。
+      // 它使用叫牌歷史區塊的前 4 個位元來標記是哪個相對位置的玩家 Pass 了。 並在觀測向量中，將對應叫牌者位置的 index 設為 1。
       if (last_bid == 0 && this_call == kPass) ptr[relative_bidder] = 1;
-      if (this_call == kDouble) {
+
+      // --- 特徵 2, 3, 4: 叫品、賭倍、再賭倍  dim = 35(7*5) *3 =  ---
+      if (this_call == kDouble) { 
+        // 如果是賭倍 (Double)，則找到 last_bid 對應的區塊，並在「賭倍者」維度上標記。 dim = 35 
+        // 公式解析:
+        // ptr + kNumPlayers: 跳過開叫前 Pass 的 4 個維度。
+        // (last_bid - kFirstBid): 找到是第幾個叫品 (例如 1C 是第 0 個)。
+        // * kNumPlayers * 3: 每個叫品有 4 個玩家 * 3 種類型 (叫、賭、再賭) 的空間。
+        // + kNumPlayers: 在該叫品的 12 維空間中，跳到賭倍區塊。
+        // + relative_bidder: 在賭倍區塊的 4 維中，標記是誰賭倍的。
         ptr[kNumPlayers + (last_bid - kFirstBid) * kNumPlayers * 3 +
             kNumPlayers + relative_bidder] = 1;
       } else if (this_call == kRedouble) {
+        // dim = 35
+        // 如果是再賭倍 (Redouble)，邏輯類似，只是跳到再賭倍區塊 (+ kNumPlayers * 2)。
         ptr[kNumPlayers + (last_bid - kFirstBid) * kNumPlayers * 3 +
             kNumPlayers * 2 + relative_bidder] = 1;
       } else if (this_call != kPass) {
-        last_bid = this_call;
+        // 如果是一個新的實質叫品。
+        last_bid = this_call; // 更新 last_bid。
+        // 在新叫品對應的區塊中，標記「叫牌者」維度。 dim = 35
         ptr[kNumPlayers + (last_bid - kFirstBid) * kNumPlayers * 3 +
             relative_bidder] = 1;
       }
     }
-    ptr += kNumPlayers * (1 + 3 * kNumBids);
+    ptr += kNumPlayers * (1 + 3 * kNumBids); // 將指標一次性跳過整個叫牌歷史的區塊。
+    
+    // Our cards 我方手牌
     for (int i = 0; i < kNumCards; ++i)
-      if (holder_[i] == player) ptr[i] = 1;
+      if (holder_[i] == player)
+        ptr[i] = 1; // 如果牌的持有者 (holder_) 是當前玩家 (player)，則在對應位置設為 1.0。 這是標準的 one-hot 編碼。
     ptr += kNumCards;
+    // 斷言檢查：計算從向量開頭到當前指標位置的總距離，並確認它是否等於叫牌階段 Tensor 的理論總長度。確保程式邏輯與宣告的 Tensor Shape 一致。
     SPIEL_CHECK_EQ(std::distance(values.begin(), ptr),
                    kAuctionTensorSize + kNumObservationTypes);
+    // 斷言檢查：確保當前指標沒有超出 `values` 向量的邊界。
     SPIEL_CHECK_LE(std::distance(values.begin(), ptr), values.size());
   }
 }
@@ -571,7 +606,7 @@ std::vector<double> BridgeState::PublicObservationTensor() const {
   ptr += kNumVulnerabilities;
   auto bidding = ptr + 2 * kNumPlayers;  // initial and recent passes
   int last_bid = 0;
-  for (int i = kNumCards; i < history_.size(); ++i) {
+  for (int i = kNumCards; i < history_.size(); ++i) { // 跳過發牌的歷史紀錄，只遍歷叫牌的動作。
     const int player = i % kNumPlayers;
     const int this_call = history_[i].action - kBiddingActionBase;
     if (this_call == kPass) {
@@ -901,8 +936,8 @@ void BridgeState::ApplyBiddingAction(int call) {
         return;
       }
     }
-  } else {
-    // A bid was made.
+  } else { 
+    // A bid was made. 玩家叫出一個新的合約
     SPIEL_CHECK_TRUE((BidLevel(call) > contract_.level) ||
                      (BidLevel(call) == contract_.level &&
                       BidSuit(call) > contract_.trumps));
@@ -945,17 +980,17 @@ void BridgeState::ApplyBiddingAction(int call) {
 
 void BridgeState::ApplyPlayAction(int card) {
   SPIEL_CHECK_TRUE(holder_[card] == current_player_);
-  holder_[card] = absl::nullopt;
-  if (num_cards_played_ % kNumPlayers == 0) {
-    CurrentTrick() = Trick(current_player_, contract_.trumps, card);
+  holder_[card] = absl::nullopt; // 將這張牌的持有者設為 absl::nullopt（相當於空值）。這表示這張牌已經被打出，不再屬於任何玩家的手牌了
+  if (num_cards_played_ % kNumPlayers == 0) { // 是否為一墩的第一張牌
+    CurrentTrick() = Trick(current_player_, contract_.trumps, card); //建立一個新的 `Trick` 物件，並記錄下引牌的玩家 (leader) 和王牌花色 (trumps)。
   } else {
     CurrentTrick().Play(current_player_, card);
   }
-  const Player winner = CurrentTrick().Winner();
+  const Player winner = CurrentTrick().Winner(); // 取得到目前為止，打出最大牌的玩家是誰
   ++num_cards_played_;
-  if (num_cards_played_ % kNumPlayers == 0) {
-    current_player_ = winner;
-    if (Partnership(winner) == Partnership(contract_.declarer))
+  if (num_cards_played_ % kNumPlayers == 0) { //決定下一位要出牌的玩家   // 當一墩的四張牌都出完時
+    current_player_ = winner; // 下一墩的引牌者就是這一墩的贏家
+    if (Partnership(winner) == Partnership(contract_.declarer)) // 如果是莊家方贏得此墩，則增加 `num_declarer_tricks_` 的計數。
       ++num_declarer_tricks_;
   } else {
     current_player_ = (current_player_ + 1) % kNumPlayers;

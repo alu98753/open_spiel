@@ -103,15 +103,18 @@ class TicTacToeState(pyspiel.State):
     return [a for a in range(_NUM_CELLS) if self.board[_coord(a)] == "."]
 
   def _apply_action(self, action):
-    """Applies the specified action to the state."""
-    self.board[_coord(action)] = "x" if self._cur_player == 0 else "o"
+    row, col = _coord(action)
+    player_mark = "x" if self._cur_player == 0 else "o"
+    self.board[row, col] = player_mark
+
     if _line_exists(self.board):
-      self._is_terminal = True
-      self._player0_score = 1.0 if self._cur_player == 0 else -1.0
-    elif all(self.board.ravel() != "."):
-      self._is_terminal = True
+        self._is_terminal = True
+        self._player0_score = 1.0 if self._cur_player == 0 else -1.0
+    elif np.all(self.board != "."):
+        self._is_terminal = True
     else:
-      self._cur_player = 1 - self._cur_player
+        self._cur_player = 1 - self._cur_player
+
 
   def _action_to_string(self, player, action):
     """Action -> string."""
@@ -174,12 +177,12 @@ def _line_value(line):
 
 def _line_exists(board):
   """Checks if a line exists, returns "x" or "o" if so, and None otherwise."""
-  return (_line_value(board[0]) or _line_value(board[1]) or
-          _line_value(board[2]) or _line_value(board[:, 0]) or
-          _line_value(board[:, 1]) or _line_value(board[:, 2]) or
-          _line_value(board.diagonal()) or
-          _line_value(np.fliplr(board).diagonal()))
-
+  for i in range(3): 
+    if _line_value(board[i, :]) or _line_value(board[:, i]): 
+      return True 
+    if _line_value(np.diag(board)) or _line_value(np.diag(np.fliplr(board))): 
+      return True 
+    return False
 
 def _coord(move):
   """Returns (row, col) from an action id."""
