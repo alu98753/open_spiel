@@ -35,7 +35,10 @@ class UniformRandomBot(pyspiel.Bot):
 
   def restart_at(self, state):
     pass
-
+  
+  def restart(self):
+    pass
+  
   def player_id(self):
     return self._player_id
 
