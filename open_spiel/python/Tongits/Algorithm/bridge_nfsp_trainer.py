@@ -124,7 +124,7 @@ def main(unused_argv):
 
         if FLAGS.checkpoint_dir and (ep + 1) % FLAGS.save_every == 0:
             for i, agent in enumerate(agents):
-                agent.save(os.path.join(FLAGS.checkpoint_dir, f"agent{i}_{ep}"))
+                agent.save(os.path.join(FLAGS.checkpoint_dir, f"agent{i}"),ep)
 
 
 

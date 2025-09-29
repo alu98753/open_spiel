@@ -293,7 +293,7 @@ class NFSP(rl_agent.AbstractAgent):
     checkpoint_filename = "_".join([name, "pid" + str(self.player_id)])
     return checkpoint_filename + "_latest"
 
-  def save(self, checkpoint_dir):
+  def save(self, checkpoint_dir,ep=None):
     """Saves the average policy network and the inner RL agent's q-network.
 
     Note that this does not save the experience replay buffers and should
@@ -308,7 +308,10 @@ class NFSP(rl_agent.AbstractAgent):
         "q_network": self._rl_agent.params_q_network,
         "avg_network": self.params_avg_network,
     }
-    path = os.path.join(checkpoint_dir, f"nfsp_pid{self.player_id}.pkl")
+    if ep is None:
+        path = os.path.join(checkpoint_dir, f"nfsp_pid{self.player_id}.pkl")
+    else:
+        path = os.path.join(checkpoint_dir, f"nfsp_pid{self.player_id}_ep{ep}.pkl")
     with open(path, "wb") as f:
         pickle.dump(state, f)
 
