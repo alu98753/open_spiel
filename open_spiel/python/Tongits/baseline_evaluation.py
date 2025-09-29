@@ -15,9 +15,9 @@ import jax
 import jax.numpy as jnp
 import optax
 from Algorithm.dummy_ai_forward import DummyNet
-from Algorithm.bridge_pg_net import policy_network_fn  # 直接重用定義
+from open_spiel.python.Tongits.Algorithm.bridge_pg_trainer import policy_network_fn  # 直接重用定義
 
-def load_rl_model(step, checkpoint_dir="checkpoints/bridge_pg"):
+def load_rl_model(step, checkpoint_dir="/mnt/zi/Master_Thesis/src/open_spiel/open_spiel/python/Tongits/checkpoints/bridge_pg"):
     """載入 RL 訓練好的 Haiku 模型參數."""
     # 載入 params
     with open(os.path.join(checkpoint_dir, f"params_{step}.pkl"), "rb") as f:
@@ -71,7 +71,7 @@ def ai_action_selector(state):
         print("使用 RL 模型 : policy gredient 選動作")
         if not hasattr(ai_action_selector, "rl_model"):
             # 第一次載入模型
-            policy_network, params = load_rl_model(step=20)  # 你要選擇對應的 checkpoint
+            policy_network, params = load_rl_model(step=100000)  # 你要選擇對應的 checkpoint
             ai_action_selector.rl_model = (policy_network, params)
 
         policy_network, params = ai_action_selector.rl_model

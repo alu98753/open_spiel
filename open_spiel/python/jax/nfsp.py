@@ -34,6 +34,7 @@ import optax
 from open_spiel.python import rl_agent
 from open_spiel.python.jax import dqn
 from open_spiel.python.utils.reservoir_buffer import ReservoirBuffer
+import pickle
 
 Transition = collections.namedtuple(
     "Transition", "info_state action_probs legal_actions_mask")
@@ -301,7 +302,15 @@ class NFSP(rl_agent.AbstractAgent):
     Args:
       checkpoint_dir: directory where checkpoints will be saved.
     """
-    raise NotImplementedError
+
+    os.makedirs(checkpoint_dir, exist_ok=True)
+    state = {
+        "q_network": self._rl_agent.params_q_network,
+        "avg_network": self.params_avg_network,
+    }
+    path = os.path.join(checkpoint_dir, f"nfsp_pid{self.player_id}.pkl")
+    with open(path, "wb") as f:
+        pickle.dump(state, f)
 
   def has_checkpoint(self, checkpoint_dir):
     for name, _ in self._savers:
@@ -319,4 +328,8 @@ class NFSP(rl_agent.AbstractAgent):
     Args:
       checkpoint_dir: directory from which checkpoints will be restored.
     """
-    raise NotImplementedError
+    path = os.path.join(checkpoint_dir, f"nfsp_pid{self.player_id}.pkl")
+    with open(path, "rb") as f:
+        state = pickle.load(f)
+    self._rl_agent.params_q_network = state["q_network"]
+    self.params_avg_network = state["avg_network"]

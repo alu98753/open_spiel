@@ -37,12 +37,12 @@ import os, pickle
 
 FLAGS = flags.FLAGS
 
-flags.DEFINE_integer("num_deals", 100000, "要訓練的總牌局數。")
-flags.DEFINE_float("learning_rate", 1e-4, "優化器的學習率。")
-flags.DEFINE_integer("print_every", 1000, "每隔多少牌局打印一次訓練狀態。")
-flags.DEFINE_string("checkpoint_dir", f"/mnt/zi/Master_Thesis/src/open_spiel/open_spiel/python/Tongits/checkpoints/bridge_pg", "模型存檔路徑")
-flags.DEFINE_integer("save_every", 10000, "每隔多少牌局存一次 checkpoint")
-flags.DEFINE_integer("load_step", 0, "若大於 0，從指定步數的 checkpoint 載入模型")
+# flags.DEFINE_integer("num_deals", 100000, "要訓練的總牌局數。")
+# flags.DEFINE_float("learning_rate", 1e-4, "優化器的學習率。")
+# flags.DEFINE_integer("print_every", 1000, "每隔多少牌局打印一次訓練狀態。")
+# flags.DEFINE_string("checkpoint_dir", f"/mnt/zi/Master_Thesis/src/open_spiel/open_spiel/python/Tongits/checkpoints/bridge_pg", "模型存檔路徑")
+# flags.DEFINE_integer("save_every", 10000, "每隔多少牌局存一次 checkpoint")
+# flags.DEFINE_integer("load_step", 0, "若大於 0，從指定步數的 checkpoint 載入模型")
 
 
 def save_checkpoint(params, optimizer_state, step, save_dir):
