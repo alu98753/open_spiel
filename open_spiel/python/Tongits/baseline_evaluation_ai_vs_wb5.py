@@ -17,7 +17,7 @@ import optax
 from Algorithm.dummy_ai_forward import DummyNet
 from open_spiel.python.Tongits.Algorithm.bridge_pg_trainer import policy_network_fn  # 直接重用定義
 
-def load_rl_model(step, checkpoint_dir="/mnt/zi/Master_Thesis/src/open_spiel/open_spiel/python/Tongits/checkpoints/bridge_pg"):
+def load_rl_model(step, checkpoint_dir=os.path.join(os.path.dirname(os.path.abspath(__file__)),"checkpoints/bridge_pg" )):
     """載入 RL 訓練好的 Haiku 模型參數."""
     # 載入 params
     with open(os.path.join(checkpoint_dir, f"params_{step}.pkl"), "rb") as f:
@@ -52,10 +52,10 @@ def dummy_action(state):
     # 確保動作合法
     legal_actions = state.legal_actions()
     if action in legal_actions:
-        print("argmax 合法，選擇該動作")
+        # print("argmax 合法，選擇該動作")
         return action
     else:
-        print("argmax 不合法，隨機挑一個合法動作")
+        # print("argmax 不合法，隨機挑一個合法動作")
         return np.random.choice(legal_actions)
 
 def ai_action_selector(state):
@@ -68,7 +68,7 @@ def ai_action_selector(state):
         return np.random.choice(state.legal_actions())
     
     elif model_name == "pg":
-        print("使用 RL 模型 : policy gredient 選動作")
+        # print("使用 RL 模型 : policy gredient 選動作")
         if not hasattr(ai_action_selector, "rl_model"):
             # 第一次載入模型
             policy_network, params = load_rl_model(step=100000)  # 你要選擇對應的 checkpoint
@@ -91,10 +91,10 @@ def ai_action_selector(state):
         action = int(jnp.argmax(logits))
 
         if action in state.legal_actions():
-            print("argmax 合法，選擇該動作")
+            # print("argmax 合法，選擇該動作")
             return action
         else:
-            print("argmax 不合法，隨機挑一個合法動作")
+            # print("argmax 不合法，隨機挑一個合法動作")
             return np.random.choice(state.legal_actions())
 
     
@@ -158,34 +158,51 @@ def main(argv):
   output_report(stats)
 
 def output_report(stats):
-  # WBridge5 隊伍: 北南 (0, 2)
-  ns_scores = stats[:, 0] + stats[:, 2] 
-  # UniformRandom 隊伍: 東西 (1, 3)
-  ew_scores = stats[:, 1] + stats[:, 3] 
+    opponent_name = FLAGS.ai_model  # 例如 dummy, pg, rl2, random
 
-  # 計算 WBridge5 隊相對於 UniformRandom 隊的平均得分差異
-  score_diffs = ns_scores - ew_scores
-  
-  mean_diff = np.mean(score_diffs)
-  # 計算標準誤 (Standard Error)
-  std_err_diff = np.std(score_diffs, ddof=1) / np.sqrt(FLAGS.num_deals)
-  
-  print("\n--- 基準測試最終結果 ---")
-  print(f"對局總數: {FLAGS.num_deals}")
-  print(f"WBridge5 (NS) 平均得分: {np.mean(ns_scores):.2f}")
-  print(f"UniformRandom (EW) 平均得分: {np.mean(ew_scores):.2f}")
-  print(u"平均得分差異 (WBridge5 - UniformRandom): {:+.2f} ± {:.2f}".format(mean_diff, std_err_diff))
-  
-  # 勝率計算: 假設 NS 隊得分差異 > 0 算作勝利
-  ns_wins = np.sum(score_diffs > 0)
-  ew_wins = np.sum(score_diffs < 0)
-  draws = np.sum(score_diffs == 0)
-  
-  ns_win_rate = ns_wins / FLAGS.num_deals
-  
-  print(f"WBridge5 (NS) 勝率: {ns_win_rate:.2%}")
-  print(f"UniformRandom (EW) 勝率: {ew_wins / FLAGS.num_deals:.2%}")
-  print(f"平局率: {draws / FLAGS.num_deals:.2%}")  
+    # WBridge5 隊伍: 北南 (0, 2)
+    ns_scores = stats[:, 0] + stats[:, 2] 
+    # 對手隊伍: 東西 (1, 3)
+    ew_scores = stats[:, 1] + stats[:, 3] 
+
+    # 計算 WBridge5 隊相對於對手的平均得分差異
+    score_diffs = ns_scores - ew_scores
+    
+    mean_diff = np.mean(score_diffs)
+    std_err_diff = np.std(score_diffs, ddof=1) / np.sqrt(FLAGS.num_deals)
+    
+    # 勝率計算
+    ns_wins = np.sum(score_diffs > 0)
+    ew_wins = np.sum(score_diffs < 0)
+    draws = np.sum(score_diffs == 0)
+    
+    ns_win_rate = ns_wins / FLAGS.num_deals
+    ew_win_rate = ew_wins / FLAGS.num_deals
+    draw_rate = draws / FLAGS.num_deals
+
+    report_str = []
+    report_str.append("--- 基準測試最終結果 ---")
+    report_str.append(f"AI 對手: {opponent_name}")
+    report_str.append(f"對局總數: {FLAGS.num_deals}")
+    report_str.append(f"WBridge5 (NS) 平均得分: {np.mean(ns_scores):.2f}")
+    report_str.append(f"{opponent_name} (EW) 平均得分: {np.mean(ew_scores):.2f}")
+    report_str.append("平均得分差異 (WBridge5 - {0}): {1:+.2f} ± {2:.2f}".format(
+        opponent_name, mean_diff, std_err_diff))
+    report_str.append(f"WBridge5 (NS) 勝率: {ns_win_rate:.2%}")
+    report_str.append(f"{opponent_name} (EW) 勝率: {ew_win_rate:.2%}")
+    report_str.append(f"平局率: {draw_rate:.2%}")
+
+    report_text = "\n".join(report_str)
+
+    # 印到終端
+    print("\n" + report_text)
+
+    # 存檔到 baseline_evaluation_report_<ai_model>.txt
+    out_name = f"baseline_evaluation_report_{opponent_name}.txt"
+    out_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), out_name)
+    with open(out_path, "w", encoding="utf-8") as f:
+        f.write(report_text)
+    print(f"\n📂 報告已輸出到: {out_path}")
 
 if __name__ == "__main__":
   app.run(main)

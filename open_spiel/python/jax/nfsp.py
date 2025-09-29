@@ -332,6 +332,7 @@ class NFSP(rl_agent.AbstractAgent):
       checkpoint_dir: directory from which checkpoints will be restored.
     """
     path = os.path.join(checkpoint_dir, f"nfsp_pid{self.player_id}.pkl")
+    print(f"Restoring NFSP agent {self.player_id} from {path}")
     with open(path, "rb") as f:
         state = pickle.load(f)
     self._rl_agent.params_q_network = state["q_network"]

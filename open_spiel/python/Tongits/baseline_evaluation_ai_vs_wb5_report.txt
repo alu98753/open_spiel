@@ -1,0 +1,8 @@
+--- 基準測試最終結果 ---
+對局總數: 2
+WBridge5 (NS) 平均得分: 12800.00
+UniformRandom (EW) 平均得分: -12800.00
+平均得分差異 (WBridge5 - UniformRandom): +25600.00 ± 0.00
+WBridge5 (NS) 勝率: 100.00%
+UniformRandom (EW) 勝率: 0.00%
+平局率: 0.00%

@@ -16,7 +16,12 @@ import optax
 from Algorithm.dummy_ai_forward import DummyNet
 from open_spiel.python.Tongits.Algorithm.bridge_pg_trainer import policy_network_fn  # 直接重用定義
 
-def load_rl_model(step, checkpoint_dir="/mnt/zi/Master_Thesis/src/open_spiel/open_spiel/python/Tongits/checkpoints/bridge_pg"):
+FLAGS = flags.FLAGS
+flags.DEFINE_string("ns_model", "dummy", "NS 隊 (玩家 0,2) 使用的 AI 模型")
+flags.DEFINE_string("ew_model", "random", "EW 隊 (玩家 1,3) 使用的 AI 模型")
+
+# load policy gradient model
+def load_pg_model(step, checkpoint_dir= os.path.join(  os.path.dirname(os.path.abspath(__file__)), "checkpoints/bridge_pg")):
     """載入 RL 訓練好的 Haiku 模型參數."""
     # 載入 params
     with open(os.path.join(checkpoint_dir, f"params_{step}.pkl"), "rb") as f:
@@ -33,9 +38,8 @@ def load_rl_model(step, checkpoint_dir="/mnt/zi/Master_Thesis/src/open_spiel/ope
 
     return policy_network, params
 
-
 ### nfsp model loading function (if needed)
-from open_spiel.python.jax import nfsp as nfsp_lib
+from open_spiel.python.jax import nfsp
 from open_spiel.python import rl_environment
 def load_nfsp_agents(checkpoint_dir, num_players=4):
     """從 checkpoint 載入 NFSP agents。"""
@@ -46,7 +50,7 @@ def load_nfsp_agents(checkpoint_dir, num_players=4):
 
     agents = []
     for pid in range(num_players):
-        agent = nfsp_lib.NFSP(
+        agent = nfsp.NFSP(
             player_id=pid,
             state_representation_size=info_state_size,
             num_actions=num_actions,
@@ -54,24 +58,19 @@ def load_nfsp_agents(checkpoint_dir, num_players=4):
             reservoir_buffer_capacity=200000,
             anticipatory_param=0.1,
         )
-        ckpt_path = os.path.join(checkpoint_dir, f"nfsp_pid{pid}.pkl")
-        if os.path.exists(ckpt_path):
-            agent.restore(checkpoint_dir)
-            print(f"載入 NFSP agent {pid} 成功")
+        ckpt_dir = os.path.join(checkpoint_dir, f"agent{pid}")
+        if os.path.exists(ckpt_dir):
+            agent.restore(ckpt_dir)   # restore 從該 agent 的資料夾
+            print(f"載入 NFSP agent {pid} 成功 (路徑={ckpt_dir})")
         else:
-            print(f"⚠️ 找不到 {ckpt_path}，使用隨機初始化")
+            print(f"⚠️ 找不到 {ckpt_dir}，使用隨機初始化")
         agents.append(agent)
     return agents
 
 
 
-# 初始化
+# load dummy model
 dummy_model = DummyNet()
-FLAGS = flags.FLAGS
-
-flags.DEFINE_string("ns_model", "dummy", "NS 隊 (玩家 0,2) 使用的 AI 模型")
-flags.DEFINE_string("ew_model", "random", "EW 隊 (玩家 1,3) 使用的 AI 模型")
-
 def dummy_action(state):
     # 取得 observation (571 維)
     obs = np.array(state.observation_tensor(), dtype=np.float32)
@@ -84,11 +83,12 @@ def dummy_action(state):
     # 確保動作合法
     legal_actions = state.legal_actions()
     if action in legal_actions:
-        print("argmax 合法，選擇該動作")
+        # print("argmax 合法，選擇該動作")
         return action
     else:
-        print("argmax 不合法，隨機挑一個合法動作")
+        # print("argmax 不合法，隨機挑一個合法動作")
         return np.random.choice(legal_actions)
+
 
 def ai_action_selector(state, model_name):
     """根據 model_name 選擇不同的 AI 行為"""
@@ -103,7 +103,7 @@ def ai_action_selector(state, model_name):
     elif model_name == "pg":
         print("使用 RL 模型 : policy gradient 選動作")
         if not hasattr(ai_action_selector, "rl_model"):
-            policy_network, params = load_rl_model(step=100000)  # TODO: 修改 checkpoint step
+            policy_network, params = load_pg_model(step=100000)  # TODO: 修改 checkpoint step
             ai_action_selector.rl_model = (policy_network, params)
 
         policy_network, params = ai_action_selector.rl_model
@@ -122,9 +122,8 @@ def ai_action_selector(state, model_name):
 
     elif model_name == "nfsp":
         if not hasattr(ai_action_selector, "nfsp_agents"):
-            checkpoint_dir = "/mnt/zi/Master_Thesis/src/open_spiel/open_spiel/python/Tongits/checkpoints/nfsp"
+            checkpoint_dir = os.path.join(  os.path.dirname(os.path.abspath(__file__)), "checkpoints/bridge_nfsp") 
             ai_action_selector.nfsp_agents = load_nfsp_agents(checkpoint_dir)
-
         cur = state.current_player()
         agent = ai_action_selector.nfsp_agents[cur]
 
@@ -151,47 +150,48 @@ def ai_action_selector(state, model_name):
         raise ValueError(f"未知的 ai_model: {model_name}")
 
 def _run_once(state, net, params):
-  """Plays bots with each other, returns terminal utility for each player."""
+    while not state.is_terminal():
+        if state.is_chance_node():
+            outcomes, probs = zip(*state.chance_outcomes())
+            state.apply_action(np.random.choice(outcomes, p=probs))
+        else:
+            if FLAGS.sleep:
+                time.sleep(FLAGS.sleep)
 
-  while not state.is_terminal():
-    if state.is_chance_node():
-      outcomes, probs = zip(*state.chance_outcomes())
-      state.apply_action(np.random.choice(outcomes, p=probs))
-    else:
-      if FLAGS.sleep:
-        time.sleep(FLAGS.sleep)  # wait for the human to see how it goes
-        
-      cur = state.current_player()
-      if cur in [0, 2]:   # NS 隊
-          action = ai_action_selector(state, FLAGS.ns_model)
-      else:               # EW 隊
-          action = ai_action_selector(state, FLAGS.ew_model)
-      state.apply_action(action)
+            cur = state.current_player()
+            if cur in [0, 2]:   # NS 隊
+                action = ai_action_selector(state, FLAGS.ns_model)
+            else:               # EW 隊
+                action = ai_action_selector(state, FLAGS.ew_model)
+            state.apply_action(action)
+
     return state
 
+
 def main(argv):
-  if len(argv) > 1:
-    raise app.UsageError("Too many command-line arguments.")
-  game = pyspiel.load_game("bridge(use_double_dummy_result=false)")
-  # net, params = load_model()
-  net, params = None, None  # TODO: 先不使用
+    if len(argv) > 1:
+        raise app.UsageError("Too many command-line arguments.")
+    game = pyspiel.load_game("bridge(use_double_dummy_result=false)")
+    # net, params = load_model()
+    net, params = None, None  # TODO: 先不使用
 
 
-  results = []
+    results = []
+    start_time = time.time()
+    for i_deal in range(FLAGS.num_deals):
+        state =  _run_once(game.new_initial_state(), net, params)
+        print("Deal #{}; final state:\n{}".format(i_deal, state))
+        print(f"  完成對局: {i_deal + 1}/{FLAGS.num_deals}", end='\r')
 
-  for i_deal in range(FLAGS.num_deals):
-    state =  _run_once(game.new_initial_state(), net, params)
-    print("Deal #{}; final state:\n{}".format(i_deal, state))
-    print(f"  完成對局: {i_deal + 1}/{FLAGS.num_deals}", end='\r')
-
-    results.append(state.returns())
-
-  stats = np.array(results)
-  # mean = np.mean(stats, axis=0)
-  # stderr = np.std(stats, axis=0, ddof=1) / np.sqrt(FLAGS.num_deals)
-  # print(u"Absolute score: {:+.1f}\u00b1{:.1f}".format(mean[0], stderr[0]))
-  # print(u"Relative score: {:+.1f}\u00b1{:.1f}".format(mean[1], stderr[1]))
-  output_report(stats)
+        results.append(state.returns())
+        
+    print("Cost time: {:.2f} 秒".format(time.time() - start_time))
+    stats = np.array(results)
+    # mean = np.mean(stats, axis=0)
+    # stderr = np.std(stats, axis=0, ddof=1) / np.sqrt(FLAGS.num_deals)
+    # print(u"Absolute score: {:+.1f}\u00b1{:.1f}".format(mean[0], stderr[0]))
+    # print(u"Relative score: {:+.1f}\u00b1{:.1f}".format(mean[1], stderr[1]))
+    output_report(stats)
 
 def output_report(stats):
     # NS 隊伍: 玩家 0 + 2
